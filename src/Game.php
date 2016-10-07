@@ -40,15 +40,32 @@ class Game
      * @var string
      */
     protected $result;
+    /**
+     * @var bool
+     */
+    protected $pairRule = true;
 
     public function __construct($suits = self::SUITS)
     {
         if(is_int($suits) && $suits > 0) $this->prepare($suits);
     }
 
-    public static function replay($sequence)
+    public function enablePair()
+    {
+        $this->pairRule = true;
+        return $this;
+    }
+
+    public function disablePair()
+    {
+        $this->pairRule = false;
+        return $this;
+    }
+
+    public static function replay($sequence, $pairRule = true)
     {
         $game = new self(0);
+        $game->pairRule = $pairRule;
         $game->sequence = $sequence;
         $game->deals = str_split($sequence);
         $game->deal();
@@ -178,7 +195,7 @@ class Game
     public function pair()
     {
         if(isset($this->result)) return $this->result === self::RESULT_PAIR;
-        if(count($this->cardsOfPlayer) == 2 && count($this->cardsOfBanker) == 2){
+        if($this->pairRule && count($this->cardsOfPlayer) == 2 && count($this->cardsOfBanker) == 2){
             $player = array_slice($this->cardsOfPlayer, 0, 2);
             if(self::valueOfCard($player[0]) == self::valueOfCard($player[1])) return $this->result = self::RESULT_PAIR;
             $banker = array_slice($this->cardsOfBanker, 0, 2);
@@ -191,38 +208,40 @@ class Game
     {
         if(isset($this->result) || $this->pair()) return false;
         $drawn = [];
-        if(self::pointOfCards($this->cardsOfPlayer) <= 5){
-            $drawn[self::PLAYER] = $playerDrawn = self::pointOfCard($this->cardsOfPlayer[] = array_shift($this->deals));
+        if(count($this->cardsOfBanker) < 3 && count($this->cardsOfPlayer) < 3){
+            if(self::pointOfCards($this->cardsOfPlayer) <= 5){
+                $drawn[self::PLAYER] = $playerDrawn = self::pointOfCard($this->cardsOfPlayer[] = array_shift($this->deals));
+            }
+            switch(self::pointOfCards($this->cardsOfBanker)){
+                case 0:
+                case 1:
+                case 2:
+                    $drawn[self::BANKER] = $this->cardsOfBanker[] = array_shift($this->deals);
+                    break;
+                case 3:
+                    if(!(isset($playerDrawn) && $playerDrawn === 8)){
+                        $drawn[self::BANKER] = $this->cardsOfBanker[] = array_shift($this->deals);
+                    }
+                    break;
+                case 4:
+                    if(!(isset($playerDrawn) && in_array($playerDrawn, [0, 1, 8, 9]))){
+                        $drawn[self::BANKER] = $this->cardsOfBanker[] = array_shift($this->deals);
+                    }
+                    break;
+                case 5:
+                    if(!(isset($playerDrawn) && in_array($playerDrawn, [0, 1, 2, 3, 8, 9]))){
+                        $drawn[self::BANKER] = $this->cardsOfBanker[] = array_shift($this->deals);
+                    }
+                    break;
+                case 6:
+                    if(isset($playerDrawn) && in_array($playerDrawn, [6, 7])){
+                        $drawn[self::BANKER] = $this->cardsOfBanker[] = array_shift($this->deals);
+                    }
+                    break;
+                default:
+            }
         }
-        switch(self::pointOfCards($this->cardsOfBanker)){
-            case 0:
-            case 1:
-            case 2:
-                $drawn[self::BANKER] = $this->cardsOfBanker[] = array_shift($this->deals);
-                break;
-            case 3:
-                if(!(isset($playerDrawn) && $playerDrawn === 8)){
-                    $drawn[self::BANKER] = $this->cardsOfBanker[] = array_shift($this->deals);
-                }
-                break;
-            case 4:
-                if(!(isset($playerDrawn) && in_array($playerDrawn, [0, 1, 8, 9]))){
-                    $drawn[self::BANKER] = $this->cardsOfBanker[] = array_shift($this->deals);
-                }
-                break;
-            case 5:
-                if(!(isset($playerDrawn) && in_array($playerDrawn, [0, 1, 2, 3, 8, 9]))){
-                    $drawn[self::BANKER] = $this->cardsOfBanker[] = array_shift($this->deals);
-                }
-                break;
-            case 6:
-                if(isset($playerDrawn) && in_array($playerDrawn, [6, 7])){
-                    $drawn[self::BANKER] = $this->cardsOfBanker[] = array_shift($this->deals);
-                }
-                break;
-            default:
-        }
-        if(empty($drawn)){ // natural
+        if(empty($drawn)){ // natural or end of round
             $pointsBanker = self::pointOfCards($this->cardsOfBanker);
             $pointsPlayer = self::pointOfCards($this->cardsOfPlayer);
             if($pointsBanker > $pointsPlayer){
