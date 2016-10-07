@@ -11,6 +11,10 @@ class Bet
      */
     protected $game;
 
+    /**
+     * Default odd configuration
+     * @var array
+     */
     protected $odds = [
         Game::RESULT_BANKER => 0.95,
         Game::RESULT_PLAYER => 1,
@@ -43,13 +47,15 @@ class Bet
     {
         if(intval($amount) <= 0) throw new \InvalidArgumentException("Bad amount '$amount'.");
         switch($for){
-            case Game::RESULT_BANKER: $this->forBanker[$gambler] = $amount; break;
-            case Game::RESULT_PLAYER: $this->forPlayer[$gambler] = $amount; break;
-            case Game::RESULT_TIE: $this->forTie[$gambler] = $amount; break;
-            case Game::RESULT_PAIR: $this->forPair[$gambler] = $amount; break;
+            case Game::RESULT_BANKER: $field = 'forBanker'; break;
+            case Game::RESULT_PLAYER: $field = 'forPlayer'; break;
+            case Game::RESULT_TIE: $field = 'forTie'; break;
+            case Game::RESULT_PAIR: $field = 'forPair'; break;
             default: throw new \InvalidArgumentException("Unknown bet type '$for'.");
         }
-        $this->gamblers[$gambler] = [$for, $amount];
+        $this->$field[$gambler] = (isset($this->$field[$gambler]) ? $this->$field[$gambler] : 0) + $amount;
+        if(!isset($this->gamblers[$gambler])) $this->gamblers[$gambler] = [];
+        $this->gamblers[$gambler][$for] = $this->$field[$gambler];
         $this->results = [];
         $this->commission = 0;
         return $this;
@@ -70,18 +76,21 @@ class Bet
     {
         if(empty($this->results)){
             $result = $this->game->result();
-            foreach($this->gamblers as $gambler => $bet){
-                list($for, $amount) = $bet;
-                if($for === $result){ // win
-                    $this->results[$gambler] = $this->settle($amount, $this->odds[$result]);
-                }else{ // lose
-                    $this->results[$gambler] = 0;
+            foreach($this->gamblers as $gambler => $bets){
+                $container = new Result();
+                foreach($bets as $bet => $amount){
+                    $container->add($bet, $amount, $bet === $result ? $this->settle($amount, $this->odds[$result]) : 0);
                 }
+                $this->results[$gambler] = $container;
             }
         }
         return $this->results;
     }
 
+    /**
+     * @param $gambler
+     * @return Result|null
+     */
     public function resultOf($gambler)
     {
         $results = $this->results();
